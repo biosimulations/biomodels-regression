@@ -206,10 +206,10 @@ def load_biomodel(biomodel_id: str, metadata_or_entry: Any) -> BiomodelLoadResul
         sed_doc = read_sedml_doc(sedml_path)
         utc = extract_first_uniform_time_course(sed_doc)
 
-        sedml_dir = os.path.dirname(os.path.abspath(sedml_path))
+        sedml_dir = os.path.dirname(sedml_path)
         resolved_sbml = resolve_sbml_source_from_sedml(sed_doc, sedml_dir, sbml_path)
 
-        stable_dir = os.path.abspath(os.path.join("models", biomodel_id))
+        stable_dir = os.path.join("models", biomodel_id)
         os.makedirs(stable_dir, exist_ok=True)
 
         stable_sedml = os.path.join(stable_dir, os.path.basename(sedml_path))
@@ -315,7 +315,7 @@ async def submit_composite_document(
     # Create Omex that gets sent to the server
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     ts_name = f"{name}_{ts}"
-    biomodel_pbg = outdir / ts_name
+    biomodel_pbg = outdir / "models" / ts_name / f"{ts_name}_url"
     omex_file = outdir / f"submit_{ts_name}.omex"
     omex_file = str(omex_file)
 
