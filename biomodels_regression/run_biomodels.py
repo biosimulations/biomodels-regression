@@ -5,6 +5,7 @@ resolve SBML source, and emit/run process-bigraph documents for UTC steps.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -310,6 +311,8 @@ async def submit_composite_document(
     outdir: str = "out",
     time: Optional[float] = None,
     save: bool = True,
+    max_retries: int = 3,
+    retry_delay: float = 5.0,
 ):
     outdir = Path(outdir)
     # Create Omex that gets sent to the server
@@ -317,6 +320,7 @@ async def submit_composite_document(
     ts_name = f"{name}_{ts}"
     biomodel_pbg = outdir / "models" / ts_name / f"{ts_name}_url"
     omex_file = outdir / f"submit_{ts_name}.omex"
+    biomodel_pbg.parent.mkdir(parents=True, exist_ok=True)
     omex_file = str(omex_file)
 
     with open(biomodel_pbg, "w") as f:
@@ -344,10 +348,22 @@ async def submit_composite_document(
         interval=time,
         output_directory=outdir
     )
-    await pb.run_remote_experiment(prog_args=args)
-    # Local
-    # await pb.run_experiment(args)
-    print("All done executing.")
+
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            await pb.run_remote_experiment(prog_args=args)
+            print(f"All done executing {name}.")
+            return
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                print(f"Attempt {attempt}/{max_retries} failed for {name}: {e}")
+                print(f"Retrying in {retry_delay}s ...")
+                await asyncio.sleep(retry_delay)
+            else:
+                print(f"All {max_retries} attempts failed for {name}: {e}")
+    raise last_error
 
 
 def run_composite_document(
@@ -418,45 +434,51 @@ async def run_biomodels(
 
     os.makedirs("documents", exist_ok=True)
     loaded: List[BiomodelLoadResult] = []
+    failed: List[str] = []
 
     for biomodel_id in biomodel_ids:
-        meta = biomodel_metadata[biomodel_id]
-        result = load_biomodel(biomodel_id, meta)
-        loaded.append(result)
+        try:
+            meta = biomodel_metadata[biomodel_id]
+            result = load_biomodel(biomodel_id, meta)
+            loaded.append(result)
 
-        doc = make_biomodel_document(
-            biomodel_id=biomodel_id,
-            sbml_path=result.sbml_path,
-            utc=result.utc,
-            steps=steps,
-        )
+            doc = make_biomodel_document(
+                biomodel_id=biomodel_id,
+                sbml_path=result.sbml_path,
+                utc=result.utc,
+                steps=steps,
+            )
 
-        # Save doc for inspection
-        Path(os.path.join("documents", f"{biomodel_id}.json")).write_text(
-            json.dumps(doc, indent=2), encoding="utf-8"
-        )
+            # Save doc for inspection
+            Path(os.path.join("documents", f"{biomodel_id}.json")).write_text(
+                json.dumps(doc, indent=2), encoding="utf-8"
+            )
 
-        # Run composite
-        await submit_composite_document(
-            doc,
-            core=core,
-            name=f"{biomodel_id}_utc",
-            outdir="out_biomodels",
-            time=None,
-            save=True,
-        )
-        # run_composite_document(
-        #     doc,
-        #     core=core,
-        #     name=f"{biomodel_id}_utc",
-        #     outdir="out_biomodels",
-        #     time=None,
-        #     save=True,
-        # )
+            # Run composite
+            await submit_composite_document(
+                doc,
+                core=core,
+                name=f"{biomodel_id}_utc",
+                outdir="out_biomodels",
+                time=None,
+                save=True,
+            )
+            # run_composite_document(
+            #     doc,
+            #     core=core,
+            #     name=f"{biomodel_id}_utc",
+            #     outdir="out_biomodels",
+            #     time=None,
+            #     save=True,
+            # )
+        except Exception as e:
+            print(f"FAILED {biomodel_id}: {e}")
+            failed.append(biomodel_id)
+
+    if failed:
+        print(f"\n{len(failed)}/{len(biomodel_ids)} model(s) failed: {failed}")
 
     return loaded
-
-import asyncio
 
 if __name__ == "__main__":
     core = get_loaded_core()
