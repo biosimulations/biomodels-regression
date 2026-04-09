@@ -257,7 +257,27 @@ def make_utc_step_state(
         },
     }
 
-
+def make_multi_biomodel_document(
+        # biomodel_id: list[str],
+        # sbml_path: list[str],
+        # utc: UniformTimeCourseSpec,
+        # steps: Dict[str, str],
+        biomodel_info = list[Dict]
+):
+    doc = {"state": {}, "schema": {}}
+    for biomodel in biomodel_info:
+        biomodel_id = biomodel["biomodel_id"]
+        sbml_path = biomodel["sbml_path"]
+        utc = biomodel["utc"]
+        steps = biomodel["steps"]
+        single_model_doc = make_biomodel_document(biomodel_id, sbml_path, utc, steps)
+        single_model_state = single_model_doc["state"]
+        single_model_schema = single_model_doc["schema"]
+        doc["state"][biomodel_id] = single_model_state
+        doc["schema"][biomodel_id] = single_model_schema
+    # TODO add comparison step
+    # TODO add emitter
+    return doc
 
 def make_biomodel_document(
     biomodel_id: str,
@@ -313,6 +333,7 @@ async def submit_composite_document(
     save: bool = True,
     max_retries: int = 3,
     retry_delay: float = 5.0,
+    sbml_path: Optional[str] = None,
 ):
     outdir = Path(outdir)
     # Create Omex that gets sent to the server
@@ -322,12 +343,16 @@ async def submit_composite_document(
     omex_file = outdir / f"submit_{ts_name}.omex"
     biomodel_pbg.parent.mkdir(parents=True, exist_ok=True)
     omex_file = str(omex_file)
+    # sbml_path = Path(sbml_path).name
 
     with open(biomodel_pbg, "w") as f:
         json.dump(document, f)
 
     with zipfile.ZipFile(omex_file, "w") as f:
         f.write(filename=biomodel_pbg, arcname=f"{ts_name}.pbg")
+        if sbml_path:
+            # sbml_arcname = Path(sbml_path).name
+            f.write(filename=sbml_path, arcname=sbml_path)
 
     # get the runtime
     if time is None:
@@ -352,6 +377,8 @@ async def submit_composite_document(
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
+            # todo -- call http client from here? in multiprocessing
+
             await pb.run_remote_experiment(prog_args=args)
             print(f"All done executing {name}.")
             return
@@ -454,6 +481,7 @@ async def run_biomodels(
                 json.dumps(doc, indent=2), encoding="utf-8"
             )
 
+
             # Run composite
             await submit_composite_document(
                 doc,
@@ -462,6 +490,7 @@ async def run_biomodels(
                 outdir="out_biomodels",
                 time=None,
                 save=True,
+                sbml_path=result.sbml_path,
             )
             # run_composite_document(
             #     doc,
@@ -482,6 +511,6 @@ async def run_biomodels(
 
 if __name__ == "__main__":
     core = get_loaded_core()
-    loaded = asyncio.run(run_biomodels(core))
+    loaded = asyncio.run(run_biomodels(core, number_of_models=100))
     # loaded = run_biomodels(core, number_of_models=5)
     print(f"Loaded {len(loaded)} biomodel(s).")
