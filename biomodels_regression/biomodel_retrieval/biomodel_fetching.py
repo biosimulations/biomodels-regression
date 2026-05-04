@@ -31,7 +31,7 @@ def fetch_biomodel_files_to_dir(biomodel_file_entry: Any, out_dir: str) -> str:
     return out_path
 
 
-def load_biomodel(biomodel_id: str, metadata_or_entry: Any) -> BiomodelLoadResult:
+def load_biomodel(biomodel_id: str, metadata_or_entry: Any, working_dir: Path) -> BiomodelLoadResult:
     entry_files = list(_iter_entry_files(metadata_or_entry))
 
     sedml_entry = find_first_sedml(entry_files)
@@ -52,7 +52,7 @@ def load_biomodel(biomodel_id: str, metadata_or_entry: Any) -> BiomodelLoadResul
         sedml_dir = os.path.dirname(sedml_path)
         resolved_sbml = resolve_sbml_source_from_sedml(sed_doc, sedml_dir, sbml_path)
 
-        stable_dir = os.path.join(os.getcwd(), "models", biomodel_id)
+        stable_dir = os.path.join(working_dir, "models", biomodel_id)
         os.makedirs(stable_dir, exist_ok=True)
 
         stable_sedml = os.path.join(stable_dir, os.path.basename(sedml_path))

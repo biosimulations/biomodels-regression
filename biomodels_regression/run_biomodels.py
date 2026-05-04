@@ -83,7 +83,8 @@ import biomodels
 
 async def run_biomodels(
         core,
-        number_of_models: int = 2
+        number_of_models: int = 2,
+        working_dir: Optional[Path] = None,
 ) -> List[BiomodelLoadResult]:
     biomodel_ids = biomodels.get_all_identifiers()[:number_of_models]
     biomodel_metadata = {bid: biomodels.get_metadata(bid) for bid in biomodel_ids}
@@ -96,7 +97,10 @@ async def run_biomodels(
         # "tellurium": "local:TelluriumUTCStep",
     }
 
-    os.makedirs("documents", exist_ok=True)
+    if working_dir is None:
+        working_dir = os.getcwd()
+
+    os.makedirs(os.path.join(working_dir, "documents"), exist_ok=True)
     loaded: List[BiomodelLoadResult] = []
     failed: List[str] = []
     submissions: list[ExperimentSubmission] = []
@@ -104,7 +108,7 @@ async def run_biomodels(
     for biomodel_id in biomodel_ids:
         try:
             meta = biomodel_metadata[biomodel_id]
-            result = load_biomodel(biomodel_id, meta)
+            result = load_biomodel(biomodel_id, meta, working_dir)
             loaded.append(result)
 
             doc = make_biomodel_document(
@@ -115,7 +119,7 @@ async def run_biomodels(
             )
 
             # Save doc for inspection
-            Path(os.path.join("documents", f"{biomodel_id}.json")).write_text(
+            Path(os.path.join(working_dir, "documents", f"{biomodel_id}.json")).write_text(
                 json.dumps(doc, indent=2), encoding="utf-8"
             )
 
@@ -141,7 +145,7 @@ async def run_biomodels(
             print(f"FAILED {biomodel_id}: {e}")
             failed.append(biomodel_id)
 
-    output_dir = Path(os.path.join(os.getcwd(), "results"))
+    output_dir = Path(os.path.join(working_dir, "results"))
     os.makedirs(output_dir, exist_ok=True)
     await batch_run_remote_experiment_and_wait(submissions=submissions, output_dir=output_dir)
 
@@ -152,6 +156,8 @@ async def run_biomodels(
 
 if __name__ == "__main__":
     core = get_loaded_core()
-    loaded = asyncio.run(run_biomodels(core, number_of_models=2))
+    top_dir = Path(os.getcwd()).parent / "regression_run"
+    os.makedirs(top_dir, exist_ok=True)
+    loaded = asyncio.run(run_biomodels(core, number_of_models=2, working_dir=top_dir))
     # loaded = run_biomodels(core, number_of_models=5)
     # print(f"Loaded {len(loaded)} biomodel(s).")
