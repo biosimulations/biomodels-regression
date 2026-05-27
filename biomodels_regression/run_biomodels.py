@@ -8,10 +8,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pbest.execution.remote.bundle import bundle_and_wait, batch_bundle_and_wait
 from pbest.globals import get_loaded_core
 from process_bigraph import Composite
 
@@ -86,8 +88,13 @@ async def run_biomodels(
         number_of_models: int = 2,
         working_dir: Optional[Path] = None,
 ) -> List[BiomodelLoadResult]:
-    biomodel_ids = biomodels.get_all_identifiers()[:number_of_models]
-    biomodel_metadata = {bid: biomodels.get_metadata(bid) for bid in biomodel_ids}
+    biomodel_ids = biomodels.get_all_identifiers()
+    biomodel_metadata = {}
+    for biomodel_id in biomodel_ids:
+        try:
+            biomodel_metadata[biomodel_id] = biomodels.get_metadata(biomodel_id)
+        except Exception as e:
+            print(f"Can't decode biomodel_id: {biomodel_id}. {e}")
 
     # Addresses match your discovered step classes
     steps = {
@@ -130,6 +137,7 @@ async def run_biomodels(
                     if isinstance(t, (int, float)):
                         times.append(float(t))
             time = max(times) if times else 10.0
+            time = 1000 if time > 1000 else time
 
             submissions.append(ExperimentSubmission(pbg=doc, interval=time))
 
@@ -147,7 +155,7 @@ async def run_biomodels(
 
     output_dir = Path(os.path.join(working_dir, "results"))
     os.makedirs(output_dir, exist_ok=True)
-    await batch_run_remote_experiment_and_wait(submissions=submissions, output_dir=output_dir)
+    await batch_bundle_and_wait(submissions=submissions, output_dir=output_dir, bundle_size=100)
 
     # if failed:
     #     print(f"\n{len(failed)}/{len(biomodel_ids)} model(s) failed: {failed}")
@@ -158,6 +166,6 @@ if __name__ == "__main__":
     core = get_loaded_core()
     top_dir = Path(os.getcwd()).parent / "regression_run"
     os.makedirs(top_dir, exist_ok=True)
-    loaded = asyncio.run(run_biomodels(core, number_of_models=2, working_dir=top_dir))
-    # loaded = run_biomodels(core, number_of_models=5)
-    # print(f"Loaded {len(loaded)} biomodel(s).")
+    start = time.time()
+    loaded = asyncio.run(run_biomodels(core, number_of_models=1000, working_dir=top_dir))
+    print(f"Ran for {time.time() - start} seconds")

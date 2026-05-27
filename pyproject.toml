@@ -7,7 +7,7 @@ name = "biomodels-regression"
 version = "0.0.2"
 description = "a package of biologically-related processes and types for process-bigraph"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "bigraph-schema",
     "process-bigraph",
@@ -19,7 +19,7 @@ dependencies = [
     "biomodels",
     "python-libsedml",
     "pytest",
-    "pbest"
+    "pbest==0.6.3"
 ]
 
 # Optional/dev dependencies
